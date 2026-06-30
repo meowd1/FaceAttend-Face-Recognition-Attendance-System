@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Register Student — FaceAttend{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Register Student</h1>
+  <p class="page-subtitle">Fill in the details and capture 20 face images via webcam.</p>
+</div>
+
+<div class="page-body">
+  <div class="two-col">
+
+    <!-- ── Left: Form ── -->
+    <div>
+      <div class="card">
+        <div class="card-body">
+          <div class="section-title">Student Details</div>
+
+          <div id="form-area">
+            <div class="form-group">
+              <label class="form-label" for="reg-name">Student Full Name</label>
+              <input id="reg-name" class="form-input" type="text"
+                     placeholder="e.g. Rahul Sharma" autocomplete="off">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="reg-roll">Roll Number</label>
+              <input id="reg-roll" class="form-input" type="text"
+                     placeholder="e.g. CS2024001" autocomplete="off">
+            </div>
+
+            <div id="form-alert" class="hidden"></div>
+
+            <button id="btn-register" class="btn btn-primary btn-lg w-full" onclick="startRegistration()">
+              <span>&#x1F4F7;</span> Save &amp; Capture Face Images
+            </button>
+          </div>
+
+          <!-- ── Progress (hidden until capture starts) ── -->
+          <div id="progress-area" class="hidden">
+            <div class="section-title">Capture Progress</div>
+            <div class="progress-wrap mb-4" style="margin-bottom:16px;">
+              <div class="progress-bar" id="reg-progress-bar" style="width:0%"></div>
+            </div>
+            <div class="flex items-center gap-2 mb-4" style="margin-bottom:14px;">
+              <span class="spinner" id="reg-spinner"></span>
+              <span id="reg-status-msg" style="font-size:14px; color: var(--text-secondary);">
+                Opening webcam…
+              </span>
+            </div>
+            <div class="text-center text-muted text-sm">
+              Keep your face clearly visible. Look directly at the camera.
+            </div>
+          </div>
+
+          <!-- ── Success (hidden until done) ── -->
+          <div id="success-area" class="hidden">
+            <div class="alert alert-success">
+              <span class="alert-icon">&#x2705;</span>
+              <div class="alert-body">
+                <div class="alert-title">Registration Successful!</div>
+                <div class="alert-msg" id="success-msg">20 images captured and saved.</div>
+              </div>
+            </div>
+            <button class="btn btn-ghost w-full" onclick="resetForm()">
+              &#x2B; Register Another Student
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Right: Instructions ── -->
+    <div>
+      <div class="card" style="margin-bottom: 16px;">
+        <div class="card-body">
+          <div class="section-title">Tips for Best Results</div>
+          <div class="step-list">
+            <div class="step-item">
+              <div class="step-num">1</div>
+              <span>Ensure good, even lighting on your face</span>
+            </div>
+            <div class="step-item">
+              <div class="step-num">2</div>
+              <span>Face the camera directly, keep head still</span>
+            </div>
+            <div class="step-item">
+              <div class="step-num">3</div>
+              <span>Only one person should be visible at a time</span>
+            </div>
+            <div class="step-item">
+              <div class="step-num">4</div>
+              <span>Avoid glasses or hats if possible</span>
+            </div>
+            <div class="step-item">
+              <div class="step-num">5</div>
+              <span>20 images will be captured automatically</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <div class="section-title">What happens next?</div>
+          <p class="text-muted text-sm" style="line-height:1.8;">
+            After capturing images, go to <strong style="color:var(--text-secondary)">Train Faces</strong>
+            to generate face encodings. You only need to re-train when new students are added.
+            Then head to <strong style="color:var(--text-secondary)">Live Attendance</strong> to start
+            marking attendance automatically.
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let polling = null;
+
+  function showAlert(type, title, msg) {
+    const el = document.getElementById('form-alert');
+    el.className = `alert alert-${type}`;
+    el.innerHTML = `
+      <span class="alert-icon">${type === 'error' ? '&#x274C;' : 'ℹ️'}</span>
+      <div class="alert-body">
+        <div class="alert-title">${title}</div>
+        ${msg ? `<div class="alert-msg">${msg}</div>` : ''}
+      </div>`;
+    el.classList.remove('hidden');
+  }
+
+  async function startRegistration() {
+    const name = document.getElementById('reg-name').value.trim();
+    const roll = document.getElementById('reg-roll').value.trim();
+
+    if (!name || !roll) {
+      showAlert('error', 'Missing Fields', 'Please fill in both Student Name and Roll Number.');
+      return;
+    }
+
+    document.getElementById('btn-register').disabled = true;
+    document.getElementById('form-alert').classList.add('hidden');
+
+    try {
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, roll }),
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        showAlert('error', 'Registration Failed', data.error);
+        document.getElementById('btn-register').disabled = false;
+        return;
+      }
+
+      // Show progress area
+      document.getElementById('form-area').classList.add('hidden');
+      document.getElementById('progress-area').classList.remove('hidden');
+
+      // Start polling
+      pollProgress(name);
+
+    } catch (e) {
+      showAlert('error', 'Network Error', 'Could not reach the server. Please try again.');
+      document.getElementById('btn-register').disabled = false;
+    }
+  }
+
+  function pollProgress(studentName) {
+    polling = setInterval(async () => {
+      try {
+        const res = await fetch('/api/register/status');
+        const state = await res.json();
+
+        // Update progress bar
+        const pct = state.total > 0 ? Math.round((state.progress / state.total) * 100) : 0;
+        document.getElementById('reg-progress-bar').style.width = pct + '%';
+        document.getElementById('reg-status-msg').textContent = state.message;
+
+        if (state.status === 'done') {
+          clearInterval(polling);
+          document.getElementById('progress-area').classList.add('hidden');
+          document.getElementById('success-area').classList.remove('hidden');
+          document.getElementById('success-msg').textContent =
+            `${state.total} images captured for ${studentName}. Train the model when ready.`;
+        } else if (state.status === 'error') {
+          clearInterval(polling);
+          document.getElementById('progress-area').classList.add('hidden');
+          document.getElementById('form-area').classList.remove('hidden');
+          document.getElementById('btn-register').disabled = false;
+          showAlert('error', 'Capture Failed', state.message);
+        }
+      } catch {}
+    }, 400);
+  }
+
+  function resetForm() {
+    document.getElementById('reg-name').value = '';
+    document.getElementById('reg-roll').value = '';
+    document.getElementById('success-area').classList.add('hidden');
+    document.getElementById('form-area').classList.remove('hidden');
+    document.getElementById('btn-register').disabled = false;
+    document.getElementById('reg-progress-bar').style.width = '0%';
+  }
+</script>
+{% endblock %}

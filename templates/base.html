@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}FaceAttend{% endblock %}</title>
+  <meta name="description" content="Face Recognition Attendance System — AI-powered, automated classroom attendance">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="app-layout">
+
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">🎓</div>
+        <div class="brand-text">
+          <span class="brand-name">FaceAttend</span>
+          <span class="brand-sub">AI Attendance</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="/" id="nav-home" class="nav-item {% if active == 'home' %}active{% endif %}">
+          <span class="nav-icon">&#x1F3E0;</span>
+          <span class="nav-label">Dashboard</span>
+        </a>
+        <a href="/register" id="nav-register" class="nav-item {% if active == 'register' %}active{% endif %}">
+          <span class="nav-icon">&#x1F464;</span>
+          <span class="nav-label">Register Student</span>
+        </a>
+        <a href="/train" id="nav-train" class="nav-item {% if active == 'train' %}active{% endif %}">
+          <span class="nav-icon">&#x1F9E0;</span>
+          <span class="nav-label">Train Faces</span>
+        </a>
+        <a href="/attendance" id="nav-attendance" class="nav-item {% if active == 'attendance' %}active{% endif %}">
+          <span class="nav-icon">&#x1F4F7;</span>
+          <span class="nav-label">Live Attendance</span>
+        </a>
+        <a href="/records" id="nav-records" class="nav-item {% if active == 'records' %}active{% endif %}">
+          <span class="nav-icon">&#x1F4CB;</span>
+          <span class="nav-label">View Records</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-clock" id="sidebar-clock">--:--:--</div>
+        <div class="sidebar-date" id="sidebar-date">Loading…</div>
+      </div>
+    </aside>
+
+    <!-- ── Main Content ── -->
+    <main class="main-content">
+      {% block content %}{% endblock %}
+    </main>
+
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

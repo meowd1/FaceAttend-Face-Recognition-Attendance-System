@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Train Faces — FaceAttend{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Train Face Encodings</h1>
+  <p class="page-subtitle">
+    Generate and save face encodings for all {{ student_count }} registered student(s).
+  </p>
+</div>
+
+<div class="page-body">
+  <div class="two-col">
+
+    <!-- ── Left: Training Panel ── -->
+    <div>
+      <div class="card">
+        <div class="card-body">
+
+          {% if student_count == 0 %}
+          <div class="alert alert-warn">
+            <span class="alert-icon">&#x26A0;</span>
+            <div class="alert-body">
+              <div class="alert-title">No Students Registered</div>
+              <div class="alert-msg">
+                Register at least one student before training.
+                <a href="/register" style="color:var(--amber); text-decoration: underline;">Register now →</a>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if model_exists %}
+          <div class="alert alert-info" style="margin-bottom: 20px;">
+            <span class="alert-icon">&#x2139;</span>
+            <div class="alert-body">
+              <div class="alert-title">Model already exists</div>
+              <div class="alert-msg">Re-training will overwrite the existing encodings file.</div>
+            </div>
+          </div>
+          {% endif %}
+
+          <div class="section-title">Training Status</div>
+
+          <!-- Progress -->
+          <div class="progress-wrap" style="margin-bottom: 14px;">
+            <div class="progress-bar" id="train-progress-bar" style="width:0%"></div>
+          </div>
+
+          <div class="flex items-center gap-2" style="margin-bottom: 20px; gap: 10px; display:flex; align-items:center;">
+            <span class="spinner hidden" id="train-spinner"></span>
+            <span id="train-status-msg" style="font-size:14px; color: var(--text-secondary);">
+              Ready to train.
+            </span>
+          </div>
+
+          <div id="train-result" class="hidden" style="margin-bottom: 20px;"></div>
+
+          <button id="btn-train" class="btn btn-primary btn-lg w-full"
+                  {% if student_count == 0 %}disabled{% endif %}
+                  onclick="startTraining()">
+            <span>&#x1F9E0;</span> Start Training
+          </button>
+
+          <div class="text-center text-muted text-sm" style="margin-top: 12px;">
+            Training may take 30–120 seconds depending on the number of students.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Right: Info ── -->
+    <div>
+      <div class="card" style="margin-bottom: 16px;">
+        <div class="card-body">
+          <div class="section-title">What training does</div>
+          <div class="step-list">
+            <div class="step-item" id="step-1">
+              <div class="step-num">1</div>
+              <span>Scans all student image folders</span>
+            </div>
+            <div class="step-item" id="step-2">
+              <div class="step-num">2</div>
+              <span>Generates 128-point face encodings per image</span>
+            </div>
+            <div class="step-item" id="step-3">
+              <div class="step-num">3</div>
+              <span>Saves encodings to <code style="font-size:12px; color:var(--cyan)">models/encodings.pkl</code></span>
+            </div>
+            <div class="step-item" id="step-4">
+              <div class="step-num">4</div>
+              <span>Ready for live attendance recognition</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <div class="section-title">Current Students</div>
+          <div id="students-list" style="max-height:200px; overflow-y:auto;">
+            <div class="text-muted text-sm">Loading…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let polling = null;
+
+  // Load student list
+  async function loadStudents() {
+    try {
+      const res  = await fetch('/api/students');
+      const list = await res.json();
+      const el   = document.getElementById('students-list');
+      if (!list.length) {
+        el.innerHTML = '<div class="text-muted text-sm">No students registered yet.</div>';
+        return;
+      }
+      el.innerHTML = list.map(s => `
+        <div class="flex items-center gap-2" style="padding: 8px 0; border-bottom: 1px solid var(--border); display:flex; gap:10px; align-items:center;">
+          <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--cyan-dim),var(--purple));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;flex-shrink:0;">
+            ${s.name.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <div style="font-size:13.5px; font-weight:600;">${s.name}</div>
+            <div style="font-size:12px; color:var(--text-muted);">${s.roll}</div>
+          </div>
+        </div>`).join('');
+    } catch {}
+  }
+
+  loadStudents();
+
+  async function startTraining() {
+    const btn = document.getElementById('btn-train');
+    btn.disabled = true;
+    document.getElementById('train-spinner').classList.remove('hidden');
+    document.getElementById('train-result').classList.add('hidden');
+    document.getElementById('train-progress-bar').style.width = '0%';
+    document.getElementById('train-status-msg').textContent = 'Initializing…';
+
+    try {
+      const res  = await fetch('/api/train', { method: 'POST' });
+      const data = await res.json();
+      if (!data.success) {
+        showResult('error', data.error);
+        btn.disabled = false;
+        document.getElementById('train-spinner').classList.add('hidden');
+        return;
+      }
+    } catch {
+      showResult('error', 'Network error. Please try again.');
+      btn.disabled = false;
+      return;
+    }
+
+    polling = setInterval(async () => {
+      try {
+        const res   = await fetch('/api/train/status');
+        const state = await res.json();
+
+        document.getElementById('train-progress-bar').style.width = (state.progress * 100) + '%';
+        document.getElementById('train-status-msg').textContent = state.message;
+
+        if (state.status === 'done') {
+          clearInterval(polling);
+          document.getElementById('train-spinner').classList.add('hidden');
+          document.getElementById('train-progress-bar').style.width = '100%';
+          showResult('success', state.message);
+          btn.disabled = false;
+          btn.innerHTML = '<span>&#x1F9E0;</span> Re-Train Model';
+        } else if (state.status === 'error') {
+          clearInterval(polling);
+          document.getElementById('train-spinner').classList.add('hidden');
+          showResult('error', state.message);
+          btn.disabled = false;
+        }
+      } catch {}
+    }, 500);
+  }
+
+  function showResult(type, msg) {
+    const el = document.getElementById('train-result');
+    el.className = `alert alert-${type}`;
+    el.innerHTML = `
+      <span class="alert-icon">${type === 'success' ? '&#x2705;' : '&#x274C;'}</span>
+      <div class="alert-body">
+        <div class="alert-title">${type === 'success' ? 'Training Complete' : 'Training Failed'}</div>
+        <div class="alert-msg">${msg}</div>
+      </div>`;
+    el.classList.remove('hidden');
+  }
+</script>
+{% endblock %}

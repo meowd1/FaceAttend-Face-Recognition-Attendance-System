@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Attendance Records — FaceAttend{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Attendance Records</h1>
+  <p class="page-subtitle">Browse, filter, and export all attendance data.</p>
+</div>
+
+<div class="page-body">
+
+  <!-- ── Controls ── -->
+  <div class="filter-bar">
+    <input id="search-input" class="form-input" type="search"
+           placeholder="&#x1F50D;  Search by name or roll number…"
+           oninput="filterTable()" style="max-width: 320px;">
+
+    <input id="date-filter" class="form-input" type="date"
+           oninput="filterTable()" style="max-width: 180px;">
+
+    <button class="btn btn-ghost btn-sm" onclick="clearFilters()">Clear</button>
+
+    <div style="margin-left: auto; display:flex; gap:10px; align-items:center;">
+      <span id="record-count" class="text-muted text-sm">Loading…</span>
+      <a id="btn-export" href="/api/export_csv" class="btn btn-primary btn-sm">
+        &#x2B07; Export CSV
+      </a>
+    </div>
+  </div>
+
+  <!-- ── Table ── -->
+  <div class="table-wrap">
+    <table id="records-table">
+      <thead>
+        <tr>
+          <th onclick="sortTable('name')">Name &#x2195;</th>
+          <th onclick="sortTable('roll')">Roll No. &#x2195;</th>
+          <th onclick="sortTable('date')">Date &#x2195;</th>
+          <th onclick="sortTable('time')">Time &#x2195;</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="table-body">
+        <tr>
+          <td colspan="5" style="text-align:center; color:var(--text-muted); padding:40px;">
+            Loading records…
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="no-results" class="hidden text-center text-muted" style="padding: 40px;">
+    No records match your search.
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let allRecords = [];
+  let sortKey    = 'date';
+  let sortAsc    = false;
+
+  async function loadRecords() {
+    try {
+      const res  = await fetch('/api/records');
+      allRecords = await res.json();
+      renderTable(allRecords);
+    } catch {
+      document.getElementById('table-body').innerHTML =
+        '<tr><td colspan="5" style="text-align:center;color:var(--red);padding:30px;">Failed to load records.</td></tr>';
+    }
+  }
+
+  function renderTable(data) {
+    const tbody = document.getElementById('table-body');
+    document.getElementById('record-count').textContent = `${data.length} record${data.length !== 1 ? 's' : ''}`;
+
+    if (!data.length) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:40px;">
+        No attendance records found.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = data.map((r, i) => `
+      <tr>
+        <td class="td-name">${escHtml(r.name)}</td>
+        <td class="td-roll">${escHtml(r.roll)}</td>
+        <td>${escHtml(r.date)}</td>
+        <td>${escHtml(r.time)}</td>
+        <td>
+          <span class="badge badge-green">&#x2713; ${escHtml(r.status)}</span>
+        </td>
+      </tr>`).join('');
+  }
+
+  function filterTable() {
+    const q    = document.getElementById('search-input').value.toLowerCase();
+    const date = document.getElementById('date-filter').value;
+
+    const filtered = allRecords.filter(r =>
+      (!q    || r.name.toLowerCase().includes(q) || r.roll.toLowerCase().includes(q)) &&
+      (!date || r.date === date)
+    );
+
+    renderTable(sortData(filtered));
+  }
+
+  function sortTable(key) {
+    if (sortKey === key) sortAsc = !sortAsc;
+    else { sortKey = key; sortAsc = true; }
+    filterTable();
+  }
+
+  function sortData(data) {
+    return [...data].sort((a, b) => {
+      const va = (a[sortKey] || '').toLowerCase();
+      const vb = (b[sortKey] || '').toLowerCase();
+      return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+  }
+
+  function clearFilters() {
+    document.getElementById('search-input').value = '';
+    document.getElementById('date-filter').value  = '';
+    renderTable(sortData(allRecords));
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  loadRecords();
+  setInterval(loadRecords, 15000);  // Auto-refresh every 15s
+</script>
+{% endblock %}

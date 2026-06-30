@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Live Attendance — FaceAttend{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Live Attendance</h1>
+  <p class="page-subtitle">Real-time face recognition — students are marked automatically when detected.</p>
+</div>
+
+<div class="page-body">
+
+  {% if not model_exists %}
+  <div class="alert alert-warn" style="margin-bottom: 24px;">
+    <span class="alert-icon">&#x26A0;</span>
+    <div class="alert-body">
+      <div class="alert-title">Model Not Trained</div>
+      <div class="alert-msg">
+        You need to train the face encodings first.
+        <a href="/train" style="color:var(--amber); text-decoration:underline;">Train now →</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="two-col" style="align-items: start;">
+
+    <!-- ── Left: Video Feed ── -->
+    <div>
+      <!-- Controls -->
+      <div class="flex items-center gap-2" style="margin-bottom: 14px; display:flex; gap:10px; align-items:center;">
+        <button id="btn-start" class="btn btn-success"
+                {% if not model_exists %}disabled{% endif %}
+                onclick="startAttendance()">
+          <span>&#x25B6;</span> Start Attendance
+        </button>
+        <button id="btn-stop" class="btn btn-danger hidden" onclick="stopAttendance()">
+          <span>&#x25A0;</span> Stop
+        </button>
+        <div id="live-badge" class="badge badge-green hidden">
+          <span class="pulse-dot"></span> LIVE
+        </div>
+        <div id="stop-badge" class="badge badge-red hidden">
+          <span>&#x25CF;</span> Stopped
+        </div>
+      </div>
+
+      <!-- Video -->
+      <div class="video-container">
+        <img id="video-feed" class="video-feed"
+             src="/video_feed"
+             alt="Camera feed"
+             onerror="this.style.opacity='0.3'">
+        <div class="video-overlay">
+          <div id="overlay-status" class="video-status">
+            <span>&#x1F4F4;</span> Ready
+          </div>
+        </div>
+      </div>
+
+      <div class="text-muted text-sm" style="margin-top: 10px; text-align: center;">
+        Green box = recognised student &nbsp;|&nbsp; Blue box = unknown face
+      </div>
+    </div>
+
+    <!-- ── Right: Attendance Log ── -->
+    <div>
+      <div class="card" style="height: 100%;">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <div class="section-title" style="margin-bottom:0;">Today's Log</div>
+            <span id="log-count" class="badge badge-cyan">0 marked</span>
+          </div>
+
+          <div class="attendance-log" id="attendance-log">
+            <div class="log-empty" id="log-empty">
+              &#x1F4F7; Start the attendance session to see logs here.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let polling   = null;
+  let logEntries = [];
+
+  function startAttendance() {
+    fetch('/api/attendance/start', { method: 'POST' })
+      .then(r => r.json())
+      .then(d => {
+        if (!d.success) {
+          alert(d.error);
+          return;
+        }
+        document.getElementById('btn-start').classList.add('hidden');
+        document.getElementById('btn-stop').classList.remove('hidden');
+        document.getElementById('live-badge').classList.remove('hidden');
+        document.getElementById('stop-badge').classList.add('hidden');
+        document.getElementById('overlay-status').innerHTML = '<span class="pulse-dot"></span> LIVE';
+        document.getElementById('log-empty').textContent = '🎯 Scanning for faces…';
+
+        polling = setInterval(pollLog, 1000);
+      })
+      .catch(() => alert('Failed to start attendance session.'));
+  }
+
+  function stopAttendance() {
+    fetch('/api/attendance/stop', { method: 'POST' })
+      .then(() => {
+        clearInterval(polling);
+        document.getElementById('btn-stop').classList.add('hidden');
+        document.getElementById('btn-start').classList.remove('hidden');
+        document.getElementById('live-badge').classList.add('hidden');
+        document.getElementById('stop-badge').classList.remove('hidden');
+        document.getElementById('overlay-status').innerHTML = '<span>&#x23F9;</span> Stopped';
+      });
+  }
+
+  async function pollLog() {
+    try {
+      const res   = await fetch('/api/attendance/status');
+      const state = await res.json();
+
+      if (!state.running && polling) {
+        clearInterval(polling);
+        document.getElementById('btn-stop').classList.add('hidden');
+        document.getElementById('btn-start').classList.remove('hidden');
+        document.getElementById('live-badge').classList.add('hidden');
+        document.getElementById('stop-badge').classList.remove('hidden');
+        document.getElementById('overlay-status').innerHTML = '<span>&#x23F9;</span> Stopped';
+      }
+
+      renderLog(state.log);
+    } catch {}
+  }
+
+  function renderLog(log) {
+    if (!log || !log.length) return;
+
+    document.getElementById('log-count').textContent = log.length + ' marked';
+
+    const container = document.getElementById('attendance-log');
+    document.getElementById('log-empty').classList.add('hidden');
+
+    // Rebuild only new entries
+    const existing = container.querySelectorAll('.log-entry').length;
+    if (log.length <= existing) return;
+
+    // Add new entries
+    const newEntries = log.slice(existing);
+    newEntries.forEach(entry => {
+      const div = document.createElement('div');
+      div.className = 'log-entry';
+      div.innerHTML = `
+        <div class="log-avatar">${entry.name.charAt(0).toUpperCase()}</div>
+        <div>
+          <div class="log-name">${entry.name}</div>
+          <div class="log-roll">${entry.roll}</div>
+          <div class="log-conf" style="color:var(--text-muted);">Confidence: ${entry.confidence}%</div>
+        </div>
+        <div class="log-time">${entry.time}</div>`;
+      container.appendChild(div);
+    });
+
+    // Auto-scroll to latest
+    container.scrollTop = container.scrollHeight;
+  }
+</script>
+{% endblock %}

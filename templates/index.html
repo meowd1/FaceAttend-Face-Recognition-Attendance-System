@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — FaceAttend{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Dashboard</h1>
+  <p class="page-subtitle">Welcome back! Here's your attendance overview.</p>
+</div>
+
+<div class="page-body">
+
+  <!-- ── Stats Row ── -->
+  <div class="stats-grid">
+    <div class="stat-card" style="--accent: #00d4ff;">
+      <span class="stat-icon">&#x1F465;</span>
+      <div class="stat-label">Registered Students</div>
+      <div class="stat-value" id="stat-students">{{ student_count }}</div>
+      <div class="stat-sub">Total enrolled</div>
+    </div>
+
+    <div class="stat-card" style="--accent: #22c55e;">
+      <span class="stat-icon">&#x2705;</span>
+      <div class="stat-label">Today's Attendance</div>
+      <div class="stat-value" id="stat-today">{{ today_count }}</div>
+      <div class="stat-sub">Marked present today</div>
+    </div>
+
+    <div class="stat-card" style="--accent: {% if model_exists %}#22c55e{% else %}#f59e0b{% endif %};">
+      <span class="stat-icon">&#x1F9E0;</span>
+      <div class="stat-label">Model Status</div>
+      <div class="stat-value" style="font-size:18px; padding-top:6px;">
+        {% if model_exists %}
+          <span class="badge badge-green">&#x25CF; Trained</span>
+        {% else %}
+          <span class="badge badge-amber">&#x25CB; Not Trained</span>
+        {% endif %}
+      </div>
+      <div class="stat-sub">
+        {% if model_exists %}Ready for recognition{% else %}Train faces to begin{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Quick Actions ── -->
+  <div class="section-title">Quick Actions</div>
+  <div class="action-grid">
+
+    <a href="/register" class="action-card"
+       style="--card-glow: rgba(0,212,255,0.08); --card-border: rgba(0,212,255,0.3); --card-shadow: 0 8px 24px rgba(0,212,255,0.15); --card-color: rgba(0,212,255,0.5);">
+      <div class="action-card-icon">&#x1F464;</div>
+      <div class="action-card-body">
+        <div class="action-card-title">Register Student</div>
+        <div class="action-card-desc">Enroll a new student and capture 20 face images via webcam.</div>
+      </div>
+    </a>
+
+    <a href="/train" class="action-card"
+       style="--card-glow: rgba(168,85,247,0.08); --card-border: rgba(168,85,247,0.3); --card-shadow: 0 8px 24px rgba(168,85,247,0.15); --card-color: rgba(168,85,247,0.5);">
+      <div class="action-card-icon">&#x1F9E0;</div>
+      <div class="action-card-body">
+        <div class="action-card-title">Train Face Encodings</div>
+        <div class="action-card-desc">Generate and save face encodings for all registered students.</div>
+      </div>
+    </a>
+
+    <a href="/attendance" class="action-card"
+       style="--card-glow: rgba(34,197,94,0.08); --card-border: rgba(34,197,94,0.3); --card-shadow: 0 8px 24px rgba(34,197,94,0.15); --card-color: rgba(34,197,94,0.5);">
+      <div class="action-card-icon">&#x1F4F7;</div>
+      <div class="action-card-body">
+        <div class="action-card-title">Start Live Attendance</div>
+        <div class="action-card-desc">Launch real-time face recognition and auto-mark attendance.</div>
+      </div>
+    </a>
+
+    <a href="/records" class="action-card"
+       style="--card-glow: rgba(245,158,11,0.08); --card-border: rgba(245,158,11,0.3); --card-shadow: 0 8px 24px rgba(245,158,11,0.15); --card-color: rgba(245,158,11,0.5);">
+      <div class="action-card-icon">&#x1F4CB;</div>
+      <div class="action-card-body">
+        <div class="action-card-title">View Attendance Records</div>
+        <div class="action-card-desc">Browse, filter, and export all attendance records to CSV.</div>
+      </div>
+    </a>
+
+  </div>
+
+  <!-- ── How It Works ── -->
+  <div class="divider"></div>
+  <div class="section-title">How It Works</div>
+  <div class="step-list">
+    <div class="step-item {% if student_count > 0 %}done{% endif %}">
+      <div class="step-num">{% if student_count > 0 %}&#x2713;{% else %}1{% endif %}</div>
+      <div>
+        <strong>Register Students</strong>
+        <span class="text-muted"> — Enter name &amp; roll number, capture 20 webcam photos</span>
+      </div>
+    </div>
+    <div class="step-item {% if model_exists %}done{% endif %}">
+      <div class="step-num">{% if model_exists %}&#x2713;{% else %}2{% endif %}</div>
+      <div>
+        <strong>Train the Model</strong>
+        <span class="text-muted"> — Generate face encodings from all student photos</span>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">3</div>
+      <div>
+        <strong>Start Attendance</strong>
+        <span class="text-muted"> — Webcam auto-recognises faces and logs attendance instantly</span>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">4</div>
+      <div>
+        <strong>Export Records</strong>
+        <span class="text-muted"> — Download all attendance data as CSV anytime</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Refresh stats every 30s
+  setInterval(async () => {
+    try {
+      const res = await fetch('/api/stats');
+      const d = await res.json();
+      document.getElementById('stat-students').textContent = d.students;
+      document.getElementById('stat-today').textContent    = d.today;
+    } catch {}
+  }, 30000);
+</script>
+{% endblock %}
